@@ -306,9 +306,10 @@ class ECSAgent(Agent):
             taskdef_arn = resp["taskDefinition"]["taskDefinitionArn"]
             new_taskdef_arn = True
             self.logger.debug(
-                "Registered task definition %s for flow %s",
+                "Registered task definition %s for flow %s with %s retries",
                 taskdef_arn,
                 flow_run.flow.id,
+                resp['ResponseMetadata']['RetryAttempts'],
             )
         else:
             from prefect.serialization.storage import StorageSchema
@@ -331,12 +332,20 @@ class ECSAgent(Agent):
 
         # Always deregister the task definition if a new one was registered
         if new_taskdef_arn:
-            self.logger.debug("Deregistering task definition %s", taskdef_arn)
-            self.ecs_client.deregister_task_definition(taskDefinition=taskdef_arn)
+            dereg_resp = self.ecs_client.deregister_task_definition(taskDefinition=taskdef_arn)
+            self.logger.debug("Deregistered task definition %s for flow %s with %s retries",
+                              taskdef_arn,
+                              flow_run.flow.id,
+                              dereg_resp['ResponseMetadata']['RetryAttempts'],
+                              )
 
         if resp.get("tasks"):
             task_arn = resp["tasks"][0]["taskArn"]
-            self.logger.debug("Started task %r for flow run %r", task_arn, flow_run.id)
+            self.logger.debug("Started task %r for flow run %r with %r retries",
+                              task_arn,
+                              flow_run.id,
+                              resp['ResponseMetadata']['RetryAttempts'],
+                              )
             return f"Task {task_arn}"
 
         raise ValueError(
