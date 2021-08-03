@@ -48,8 +48,8 @@ Because the UI is code that runs in your browser, you can reuse Prefect Cloud's 
 
 To achieve this:
 
-- [sign up for a free Developer account](https://cloud.prefect.io/)
-- login; if you click the Prefect Cloud logo at the bottom of the left menu bar, the UI will switch the endpoint that it talks to
+- [sign up for a free account](https://cloud.prefect.io/)
+- login; if you click the status indicator to the right of the nav-bar, the UI will switch the endpoint that it talks to
 - you can further configure the location of this endpoint on the Home page
   :::
 
@@ -65,6 +65,30 @@ options you can set to automatically use of a volume for Postgres:
 Every time you run the `prefect server start` command [a set of alembic migrations](https://github.com/PrefectHQ/server/tree/master/services/postgres/alembic/versions) are automatically
 applied against the database to ensure the schema is consistent. To run the migrations directly please
 see the documentation on [prefect server migrations](https://github.com/PrefectHQ/server#running-the-system).
+
+### External Postgres instance
+
+You can also configure Prefect Server to use an external Postgres instance.
+
+The simplest way to specify an external Postgres instance is passing in a command line argument:
+
+```bash
+prefect server start --postgres-url postgres://<username>:<password>@hostname:<port>/<dbname>
+```
+
+You can also configure the database url in `~/.prefect/config.toml` on whatever machine you're running Prefect Server:
+
+```
+[server.database]
+connection_url = "postgres://<username>:<password>@hostname:<port>/<dbname>"
+```
+
+And then run `prefect server start --external-postgres`. 
+
+Using either method, the connection url will be passed directly to Hasura. For more information and troubleshooting, see the [docs](https://hasura.io/docs/latest/graphql/core/deployment/deployment-guides/docker.html#database-url).
+
+Please note [a set of alembic migrations](https://github.com/PrefectHQ/server/tree/master/services/postgres/alembic/versions) are automatically applied against
+the external database on start.
 
 ## How to upgrade your server instance
 

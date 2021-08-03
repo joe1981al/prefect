@@ -63,49 +63,18 @@ Note that you can change backends at any time by rerunning the `prefect backend 
 If you're using Prefect Cloud, you'll also need to authenticate with the
 backend before you can proceed further.
 
-### Create an API Key
+### Create an API key and login
 
-To authenticate, you'll need to create an [API Key](/orchestration/concepts/tokens.html#user) and configure it with the
-[Prefect Command Line Interface](/orchestration/concepts/cli.html#cli).
+To authenticate, you'll need to create an [API Key](/orchestration/concepts/api_keys.md) and save it. 
 
 - Login to [https://cloud.prefect.io](https://cloud.prefect.io)
 - Navigate to the [API Keys page](https://cloud.prefect.io/user/keys). In the User menu in the top right corner go to **Account Settings** -> **API Keys** -> **Create An API Key**.
 - Copy the created key
-- Configure the CLI to use the key by running
+- Login with the Prefect CLI `prefect auth login --key <YOUR-KEY>`
 
-```bash
-prefect auth login -t <API_KEY>
-```
 
-### Create a Service Account Key
+::: tip Authentication for agents
 
-Running deployed Flows with an [Agent](/orchestration/agents/overview.html)
-also requires an API key for the Agent. You can create one
-using the CLI:
-
-```bash
-prefect auth create-token -n my-runner-token -s RUNNER
-```
-
-You'll need this token later in the tutorial. You can save it locally either in
-your `~/.prefect/config.toml` config file, or as an environment variable:
-
-:::: tabs
-::: tab config.toml
-
-```toml
-# ~/.prefect/config.toml
-[cloud.agent]
-auth_token = <SERVICE_ACCOUNT_API_KEY>
-```
+When running deployed Flows with an [Agent](/orchestration/agents/overview.html) we recommend creating an API key associated with a service account instead of your user. See the [API keys documentation](/orchestration/concepts/api_keys.md) for details.
 
 :::
-::: tab "Environment Variable"
-
-```bash
-export PREFECT__CLOUD__AGENT__AUTH_TOKEN=<SERVICE_ACCOUNT_API_KEY>
-```
-
-:::
-
-::::
