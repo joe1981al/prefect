@@ -147,7 +147,7 @@ class ECSAgent(Agent):
         env_vars: dict = None,
         max_polls: int = None,
         agent_address: str = None,
-        no_cloud_logs: bool = False,
+        no_cloud_logs: bool = None,
         task_definition_path: str = None,
         run_task_kwargs_path: str = None,
         aws_access_key_id: str = None,
@@ -291,13 +291,8 @@ class ECSAgent(Agent):
         Returns:
             - str: Information about the deployment
         """
-        self.logger.info("Deploying flow run %r", flow_run.id)
-
         run_config = self._get_run_config(flow_run, ECSRun)
         assert isinstance(run_config, ECSRun)  # mypy
-
-        reg_retries = 0
-        dereg_retries = 0
 
         if run_config.task_definition_arn is None:
             # Register a new task definition
@@ -307,13 +302,11 @@ class ECSAgent(Agent):
             taskdef = self.generate_task_definition(flow_run, run_config)
             resp = self.ecs_client.register_task_definition(**taskdef)
             taskdef_arn = resp["taskDefinition"]["taskDefinitionArn"]
-            reg_retries = resp['ResponseMetadata']['RetryAttempts']
             new_taskdef_arn = True
             self.logger.debug(
-                "Registered task definition %s for flow %s with %s retries",
+                "Registered task definition %s for flow %s",
                 taskdef_arn,
                 flow_run.flow.id,
-                reg_retries,
             )
         else:
             from prefect.serialization.storage import StorageSchema
@@ -333,31 +326,16 @@ class ECSAgent(Agent):
         kwargs = self.get_run_task_kwargs(flow_run, run_config)
 
         resp = self.ecs_client.run_task(taskDefinition=taskdef_arn, **kwargs)
-        run_retries = resp['ResponseMetadata']['RetryAttempts']
 
         # Always deregister the task definition if a new one was registered
         if new_taskdef_arn:
-            self.logger.debug("Deregistering task definition %s for flow %s",
-                              taskdef_arn,
-                              flow_run.flow.id,
-                              )
-            dereg_resp = self.ecs_client.deregister_task_definition(taskDefinition=taskdef_arn)
-            dereg_retries = dereg_resp['ResponseMetadata']['RetryAttempts']
-            self.logger.debug("Deregistered task definition %s for flow %s with %s retries",
-                              taskdef_arn,
-                              flow_run.flow.id,
-                              dereg_retries,
-                              )
+            self.logger.debug("Deregistering task definition %s", taskdef_arn)
+            self.ecs_client.deregister_task_definition(taskDefinition=taskdef_arn)
 
         if resp.get("tasks"):
             task_arn = resp["tasks"][0]["taskArn"]
-            self.logger.debug("Started task %r for flow run %r with %r retries",
-                              task_arn,
-                              flow_run.id,
-                              run_retries,
-                              )
-            return f"Task {task_arn}. Registration Retries: {reg_retries}, Deregistration Retries: {dereg_retries}, " \
-                   f"Run Retries: {run_retries}"
+            self.logger.debug("Started task %r for flow run %r", task_arn, flow_run.id)
+            return f"Task {task_arn}"
 
         raise ValueError(
             "Failed to start task for flow run {0}. Failures: {1}".format(
@@ -530,9 +508,24 @@ class ECSAgent(Agent):
                 "PREFECT__CLOUD__API": config.cloud.api,
                 "PREFECT__CONTEXT__FLOW_RUN_ID": flow_run.id,
                 "PREFECT__CONTEXT__FLOW_ID": flow_run.flow.id,
-                "PREFECT__LOGGING__LOG_TO_CLOUD": str(self.log_to_cloud).lower(),
-                "PREFECT__CLOUD__AUTH_TOKEN": config.cloud.agent.auth_token,
+                "PREFECT__CLOUD__SEND_FLOW_RUN_LOGS": str(self.log_to_cloud).lower(),
+                "PREFECT__CLOUD__AUTH_TOKEN": (
+                    # Pull an auth token if it exists but fall back to an API key so
+                    # flows in pre-0.15.0 containers still authenticate correctly
+                    config.cloud.agent.get("auth_token")
+                    or self.flow_run_api_key
+                    or ""
+                ),
+                "PREFECT__CLOUD__API_KEY": self.flow_run_api_key or "",
+                "PREFECT__CLOUD__TENANT_ID": (
+                    # Providing a tenant id is only necessary for API keys (not tokens)
+                    self.client.tenant_id
+                    if self.flow_run_api_key
+                    else ""
+                ),
                 "PREFECT__CLOUD__AGENT__LABELS": str(self.labels),
+                # Backwards compatibility variable for containers on Prefect <0.15.0
+                "PREFECT__LOGGING__LOG_TO_CLOUD": str(self.log_to_cloud).lower(),
             }
         )
         container_env = [{"name": k, "value": v} for k, v in env.items()]
